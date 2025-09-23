@@ -1,28 +1,95 @@
 <launch>
 
-<!-- Setup RTAB-Map -->
+<!-- Setup RTAB-Map with dual stereo cameras -->
 <include file="$(find rtabmap_ros)/launch/stereo_mapping.launch">
 <arg name="rtabmap_args"  value="--delete_db_on_start" />
-<arg name="left_image_topic"  value="/psvr/right/image_rect_color" />
-<arg name="right_image_topic" value="/psvr/left/image_rect_color" />
-<arg name="left_camera_info_topic" value="/psvr/left/camera_info" />
-<arg name="right_camera_info_topic" value="/psvr/right/camera_info" />
+<!-- Primary stereo pair (camera 0) -->
+<arg name="left_image_topic"  value="/psvr_0/left/image_rect_color" />
+<arg name="right_image_topic" value="/psvr_0/right/image_rect_color" />
+<arg name="left_camera_info_topic" value="/psvr_0/left/camera_info" />
+<arg name="right_camera_info_topic" value="/psvr_0/right/camera_info" />
+<arg name="frame_id" value="psvr_0" />
 <arg name="rviz" value="false" />
 <arg name="approx_sync" value="false" />
 <arg name="visual_odometry" value="true" />
+<!-- Subscribe to additional stereo pair for enhanced mapping -->
+<arg name="subscribe_stereo" value="true" />
+<arg name="stereo_namespace" value="/psvr_1" />
 </include>
 
-
-
-<!-- Start frame capturing from psvr camera -->
-<node pkg="PSVR_cam_core" type="psvr_cam_publisher.py" name="psvr_cam_publisher">
+<!-- Alternative: Manual RTAB-Map node configuration for full dual-camera control -->
+<!-- Uncomment this section and comment the include above for advanced dual-camera SLAM -->
+<!--
+<node name="rtabmap" pkg="rtabmap_ros" type="rtabmap" output="screen" args="--delete_db_on_start">
+  <param name="frame_id" type="string" value="base_link"/>
+  <param name="odom_frame_id" type="string" value="odom"/>
+  <param name="subscribe_depth" type="bool" value="false"/>
+  <param name="subscribe_stereo" type="bool" value="true"/>
+  <param name="approx_sync" type="bool" value="false"/>
+  
+  <!-- Primary stereo pair -->
+  <remap from="left/image_rect" to="/psvr_0/left/image_rect_color"/>
+  <remap from="right/image_rect" to="/psvr_0/right/image_rect_color"/>
+  <remap from="left/camera_info" to="/psvr_0/left/camera_info"/>
+  <remap from="right/camera_info" to="/psvr_0/right/camera_info"/>
+  
+  <!-- Secondary stereo pair for additional features -->
+  <remap from="left/image_rect_2" to="/psvr_1/left/image_rect_color"/>
+  <remap from="right/image_rect_2" to="/psvr_1/right/image_rect_color"/>
+  <remap from="left/camera_info_2" to="/psvr_1/left/camera_info"/>
+  <remap from="right/camera_info_2" to="/psvr_1/right/camera_info"/>
+  
+  <param name="RGBD/NeighborLinkRefining" type="string" value="true"/>
+  <param name="RGBD/ProximityBySpace" type="string" value="true"/>
+  <param name="RGBD/AngularUpdate" type="string" value="0.1"/>
+  <param name="RGBD/LinearUpdate" type="string" value="0.1"/>
+  <param name="RGBD/OptimizeFromGraphEnd" type="string" value="false"/>
+  <param name="Grid/FromDepth" type="string" value="false"/>
+  <param name="Reg/Strategy" type="string" value="1"/>
+  <param name="Vis/EstimationType" type="string" value="1"/>
+  <param name="Vis/MaxFeatures" type="string" value="1000"/>
 </node>
 
-<!-- Rotate the camera frame. -->
+<node pkg="rtabmap_ros" type="rtabmapviz" name="rtabmapviz" output="screen">
+  <param name="subscribe_stereo" type="bool" value="true"/>
+  <param name="subscribe_odom_info" type="bool" value="true"/>
+  <param name="frame_id" type="string" value="base_link"/>
+  <param name="odom_frame_id" type="string" value="odom"/>
+  <param name="wait_for_transform_duration" type="double" value="0.2"/>
+  
+  <remap from="left/image_rect" to="/psvr_0/left/image_rect_color"/>
+  <remap from="right/image_rect" to="/psvr_0/right/image_rect_color"/>
+  <remap from="left/camera_info" to="/psvr_0/left/camera_info"/>
+  <remap from="right/camera_info" to="/psvr_0/right/camera_info"/>
+</node>
+-->
+
+
+
+<!-- Start frame capturing from psvr cameras -->
+<!-- Camera 0 -->
+<node pkg="PSVR_cam_core" type="psvr_cam_publisher.py" name="psvr_cam_publisher_0">
+  <param name="cam_number" value="0" />
+  <param name="camera_namespace" value="psvr_0" />
+</node>
+
+<!-- Camera 1 -->
+<node pkg="PSVR_cam_core" type="psvr_cam_publisher.py" name="psvr_cam_publisher_1">
+  <param name="cam_number" value="1" />
+  <param name="camera_namespace" value="psvr_1" />
+</node>
+
+<!-- Rotate the camera frames. -->
 <arg name="pi/2" value="1.5707963267948966" />
 <arg name="optical_rotate" value="0 0 0 -$(arg pi/2) 0 -$(arg pi/2)" />
-<node pkg="tf" type="static_transform_publisher" name="camera_base_link"
-        args="$(arg optical_rotate) base_link psvr 100" />
+
+<!-- Transform for camera 0 -->
+<node pkg="tf" type="static_transform_publisher" name="camera_0_base_link"
+        args="$(arg optical_rotate) base_link psvr_0 100" />
+
+<!-- Transform for camera 1 -->
+<node pkg="tf" type="static_transform_publisher" name="camera_1_base_link"
+        args="0.1 0 0 -$(arg pi/2) 0 -$(arg pi/2) base_link psvr_1 100" />
         
 <!-- Rotate the odometry frame. -->    
 <arg name="odom_rotate" value="0 0 0 -$(arg pi/2) 0 -$(arg pi/2)" />
@@ -31,7 +98,13 @@
 
 
 <!-- Stereo image processing -->
-<node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_image_proc" ns="psvr">
+<!-- Stereo processing for camera 0 -->
+<node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_image_proc_0" ns="psvr_0">
+<param name="approximate_sync" value="false" />
+</node>
+
+<!-- Stereo processing for camera 1 -->
+<node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_image_proc_1" ns="psvr_1">
 <param name="approximate_sync" value="false" />
 </node>
 

@@ -10,9 +10,17 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CameraInfo
 
 rospack = rospkg.RosPack()
-CAM_NUMBER = 0
-LEFT_FILE_NAME = rospack.get_path('PSVR_cam_core')+'/calibration/left.yaml'
-RIGHT_FILE_NAME = rospack.get_path('PSVR_cam_core')+'/calibration/right.yaml'
+
+def get_calibration_files(cam_number):
+    """Get calibration file paths based on camera number"""
+    base_path = rospack.get_path('PSVR_cam_core') + '/calibration'
+    
+    # For multi-camera setup, you might want different calibration files
+    # For now, using the same calibration files for all cameras
+    left_file = base_path + '/left.yaml'
+    right_file = base_path + '/right.yaml'
+    
+    return left_file, right_file
 
 
 
@@ -40,7 +48,7 @@ def parse_yaml(filename):
     stream = open(filename, 'r')
     calib_data = yaml.load(stream)
     cam_info = CameraInfo()
-    cam_info.header.frame_id = "psvr" # change to psvr for original static output
+    cam_info.header.frame_id = "psvr"  # will be updated in main with namespace parameter
     cam_info.width = calib_data['image_width']
     cam_info.height = calib_data['image_height']
     cam_info.K = calib_data['camera_matrix']['data']
@@ -62,24 +70,34 @@ if __name__ == "__main__":
     # setup the node that will be running
     rospy.init_node("psvr_core")
 
+    # Get camera number from ROS parameter (default to 0)
+    cam_number = rospy.get_param('~cam_number', 0)
+    
+    # Get camera namespace from ROS parameter (default to 'psvr')
+    camera_namespace = rospy.get_param('~camera_namespace', 'psvr')
+    
+    rospy.loginfo(f"Starting PSVR camera publisher for camera {cam_number} in namespace '{camera_namespace}'")
+
+    # Get calibration files for this camera
+    left_file, right_file = get_calibration_files(cam_number)
+    
     # setup the publisher where the images will be published
-    # we are publishing to the 'Image' topic
-    raw_left = rospy.Publisher('psvr/left/image_raw', Image, queue_size=10)
-    raw_right = rospy.Publisher('psvr/right/image_raw', Image, queue_size=10)
+    raw_left = rospy.Publisher(f'{camera_namespace}/left/image_raw', Image, queue_size=10)
+    raw_right = rospy.Publisher(f'{camera_namespace}/right/image_raw', Image, queue_size=10)
 
     # we also have to publish the info for each image
-    info_left = rospy.Publisher('psvr/left/camera_info', CameraInfo, queue_size=10)
-    info_right = rospy.Publisher('psvr/right/camera_info', CameraInfo, queue_size=10)
+    info_left = rospy.Publisher(f'{camera_namespace}/left/camera_info', CameraInfo, queue_size=10)
+    info_right = rospy.Publisher(f'{camera_namespace}/right/camera_info', CameraInfo, queue_size=10)
 
     # setup the camera
-    psvr = initialize(CAM_NUMBER)
+    psvr = initialize(cam_number)
 
     # setup cv2 to ros conversion
     bridge = CvBridge()
 
     # get camera info ready to be published
-    left_cam_info = parse_yaml(LEFT_FILE_NAME)
-    right_cam_info = parse_yaml(RIGHT_FILE_NAME)
+    left_cam_info = parse_yaml(left_file)
+    right_cam_info = parse_yaml(right_file)
 
 
     # run while ros is not shutdown
@@ -94,9 +112,9 @@ if __name__ == "__main__":
         leftImgMsg = bridge.cv2_to_imgmsg(left, "bgr8")
         rightImgMsg = bridge.cv2_to_imgmsg(right, "bgr8")
 
-        # give the images being published a frame id. Used for RTAB-Mamp odometry
-        leftImgMsg.header.frame_id = 'psvr'
-        rightImgMsg.header.frame_id = 'psvr'
+        # give the images being published a frame id. Used for RTAB-Map odometry
+        leftImgMsg.header.frame_id = camera_namespace
+        rightImgMsg.header.frame_id = camera_namespace
 
         # set time stamps for both the images and their camera info
         cap_time = rospy.Time.now()
