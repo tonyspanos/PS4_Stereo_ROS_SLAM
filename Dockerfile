@@ -44,8 +44,7 @@ RUN apt-get update && apt-get install -y \
 RUN python3 -m pip install \
   pyusb \
   pyyaml \
-  numpy \
-  opencv-python
+  numpy
 
 # Setup workspace
 WORKDIR /catkin_ws

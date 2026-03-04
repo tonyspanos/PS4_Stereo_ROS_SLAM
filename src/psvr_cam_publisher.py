@@ -12,14 +12,20 @@ from sensor_msgs.msg import Image, CameraInfo
 rospack = rospkg.RosPack()
 
 def get_calibration_files(cam_number):
-    """Get calibration file paths based on camera number"""
+    """Get calibration file paths based on camera number.
+    Both PS4 VR cameras share the same calibration since they are the same model.
+    For per-camera calibration, place files in calibration/cam_<N>/{left,right}.yaml.
+    """
     base_path = rospack.get_path('PSVR_cam_core') + '/calibration'
-    
-    # For multi-camera setup, you might want different calibration files
-    # For now, using the same calibration files for all cameras
-    left_file = base_path + '/left.yaml'
-    right_file = base_path + '/right.yaml'
-    
+
+    cam_specific = os.path.join(base_path, f'cam_{cam_number}')
+    if os.path.isdir(cam_specific):
+        left_file = os.path.join(cam_specific, 'left.yaml')
+        right_file = os.path.join(cam_specific, 'right.yaml')
+    else:
+        left_file = os.path.join(base_path, 'left.yaml')
+        right_file = os.path.join(base_path, 'right.yaml')
+
     return left_file, right_file
 
 
@@ -32,12 +38,14 @@ def initialize(CAM_NUMBER):
     return camera
 
 def decode(frame):
-    left = np.zeros((800, 1264, 3), np.uint8)
-    right = np.zeros((800, 1264, 3), np.uint8)
+    """Decode the PS4 VR camera's raw 3448x808 interleaved frame into left/right images.
 
-    for i in range(800):
-        left[i] = frame[i, 64: 1280 + 48]
-        right[i] = frame[i, 1280 + 48: 1280 + 48 + 1264]
+    The sensor layout (per row, 3448 px wide):
+      [64 px padding] [1264 px left] [48 px gap] [1264 px right] [808 px unused]
+    Each image is 800 rows tall.  pyrDown halves to 632x400 for processing.
+    """
+    left = frame[0:800, 64:1328]       # cols 64..1327  (1264 wide)
+    right = frame[0:800, 1328:2592]     # cols 1328..2591 (1264 wide)
 
     left = cv2.pyrDown(left)
     right = cv2.pyrDown(right)
@@ -45,8 +53,8 @@ def decode(frame):
     return (left, right)
 
 def parse_yaml(filename):
-    stream = open(filename, 'r')
-    calib_data = yaml.load(stream)
+    with open(filename, 'r') as stream:
+        calib_data = yaml.safe_load(stream)
     cam_info = CameraInfo()
     cam_info.header.frame_id = "psvr"  # will be updated in main with namespace parameter
     cam_info.width = calib_data['image_width']
@@ -100,10 +108,16 @@ if __name__ == "__main__":
     right_cam_info = parse_yaml(right_file)
 
 
+    rate = rospy.Rate(30)
+
     # run while ros is not shutdown
     while not rospy.is_shutdown():
         # gather the image
         ret, frame = psvr.read()
+        if not ret or frame is None:
+            rospy.logwarn("Failed to read frame from camera %d", cam_number)
+            rate.sleep()
+            continue
 
         # crop left and right
         left, right = decode(frame)
@@ -131,3 +145,5 @@ if __name__ == "__main__":
         # publish image info to topic
         info_left.publish(left_cam_info)
         info_right.publish(right_cam_info)
+
+        rate.sleep()

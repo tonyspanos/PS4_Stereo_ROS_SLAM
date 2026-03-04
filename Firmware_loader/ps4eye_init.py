@@ -1,7 +1,12 @@
 #!/usr/bin/env python
+import os
 import usb.core
 import usb.util
 import sys
+
+# Resolve firmware path relative to this script's directory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+FIRMWARE_PATH = os.path.join(SCRIPT_DIR, 'firmware_V2.bin')
 
 # check for already initialized devices
 initialized_v1 = list(usb.core.find(find_all=True, idVendor=0x05a9, idProduct=0x058a))
@@ -44,7 +49,7 @@ def flash_device(dev, device_num):
         value = 0
         
         # open firmware file for this device
-        with open("firmware_V2.bin", "rb") as firmware:
+        with open(FIRMWARE_PATH, "rb") as firmware:
             # transfer 512b chunks of the firmware
             for chunk in read_chunks(firmware, chunk_size):
                 ret = dev.ctrl_transfer(0x40, 0x0, value, index, chunk)
@@ -58,7 +63,7 @@ def flash_device(dev, device_num):
         # command reboots device with new firmware and product id
         try:
             ret = dev.ctrl_transfer(0x40, 0x0, 0x2200, 0x8018, [0x5b])
-        except:
+        except usb.core.USBError:
             print(f'Device {device_num}: PS4 camera firmware uploaded and device reset')
             return True
             

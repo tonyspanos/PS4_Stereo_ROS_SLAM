@@ -1,22 +1,24 @@
 <launch>
-<!-- THIS LAUNCH FILE ONLY RUNS THE PS4 CAMERA AND STEREO_IMAGE_PROC. IT IS FOR DEBUGGING IN RVIZ -->
+<!-- DEBUG LAUNCH: Runs a single PS4 camera and stereo_image_proc for tuning in RViz -->
+<arg name="cam_device"  default="0" doc="/dev/video device index" />
+<arg name="camera_ns"   default="psvr_0" doc="Camera namespace" />
+
 <node pkg="PSVR_cam_core" type="psvr_cam_publisher.py" name="psvr_cam_publisher">
+  <param name="cam_number"        value="$(arg cam_device)" />
+  <param name="camera_namespace"  value="$(arg camera_ns)" />
 </node>
 
-<arg name="parent_frame" default="/map" />
-  <arg name="parent_transform" default="0 0 1 -1.57 0 -1.57" />
-  
-  
-<arg name="PUBLISH_TF" default="true" />
+<arg name="pi/2" value="1.5707963267948966" />
+<arg name="optical_rotate" value="0 0 0 -$(arg pi/2) 0 -$(arg pi/2)" />
 
-<node name="camera_transform" pkg="tf" type="static_transform_publisher" args="$(arg parent_transform) $(arg parent_frame) /psvr 10" if="$(arg PUBLISH_TF)"/>
+<node name="camera_transform" pkg="tf" type="static_transform_publisher"
+      args="$(arg optical_rotate) /map $(arg camera_ns) 100" />
 
-<node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_image_proc" ns="psvr">
-<param name="approximate_sync" value="true" />
+<node pkg="stereo_image_proc" type="stereo_image_proc" name="stereo_image_proc" ns="$(arg camera_ns)">
+  <param name="approximate_sync" value="true" />
 </node>
 
-<node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure">
-</node>
+<node pkg="rqt_reconfigure" type="rqt_reconfigure" name="rqt_reconfigure" />
 
 </launch>
 

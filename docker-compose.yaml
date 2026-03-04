@@ -1,42 +1,39 @@
-version: '3.5'
+version: "3.5"
 # xhost +local:root
 
-
 services:
+  ros-master:
+    image: ros:noetic-ros-core
+    container_name: roscore
+    network_mode: host
 
-    ros-master:
-        image: ros:noetic-ros-core
-        container_name: roscore
-        network_mode: host
+    # environment:
+    # - ROS_HOSTNAME=ros-master
+    # - ROS_MASTER_URI=http://ros-master:11311
+    command: stdbuf -o L roscore
+    restart: always
 
-        # environment:
-            # - ROS_HOSTNAME=ros-master
-            # - ROS_MASTER_URI=http://ros-master:11311
-        command: stdbuf -o L roscore
-        restart: always
+  ps4-slam:
+    container_name: ps4-slam
+    image: ps4-slam:latest
+    restart: no
 
-
-    ps4-slam:
-        container_name: ps4-slam
-        image: ps4-slam:latest
-        restart: no
-
-        stdin_open: true # docker run -i
-        tty: true        # docker run -t
-        privileged: true
-        network_mode: host
-        environment:
-            - ROS_MASTER_URI=http://localhost:11311
-            - DISPLAY=$DISPLAY
-            - QT_X11_NO_MITSHM=1
-            - XAUTHORITY=/tmp/.docker.xauth
-        # environment:
-        #     - ROS_DOMAIN_ID=112
-        #     - DISPLAY=172.17.0.1:0
-            # - RMW_IMPLEMENTATION=rmw_fastrtps_dynamic_cpp
-        depends_on:
-            - ros-master
-        # command: rosrun PSVR_cam_core psvr_cam_publisher.py
-        volumes:
-            - /tmp/.X11-unix:/tmp/.X11-unix:rw
-            - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+    stdin_open: true # docker run -i
+    tty: true # docker run -t
+    privileged: true
+    network_mode: host
+    environment:
+      - ROS_MASTER_URI=http://localhost:11311
+      - DISPLAY=$DISPLAY
+      - QT_X11_NO_MITSHM=1
+      - XAUTHORITY=/tmp/.docker.xauth
+    # environment:
+    #     - ROS_DOMAIN_ID=112
+    #     - DISPLAY=172.17.0.1:0
+    # - RMW_IMPLEMENTATION=rmw_fastrtps_dynamic_cpp
+    depends_on:
+      - ros-master
+    # command: rosrun PSVR_cam_core psvr_cam_publisher.py
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
